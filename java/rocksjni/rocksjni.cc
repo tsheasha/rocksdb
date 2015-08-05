@@ -14,11 +14,20 @@
 #include <vector>
 
 #include "include/org_rocksdb_RocksDB.h"
+#include "include/org_rocksdb_LongArray.h"
 #include "rocksdb/db.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/types.h"
 #include "rocksjni/portal.h"
 #include "util/compression.h"
+
+static jfieldID LongArray_buffer;
+static jfieldID LongArray_length;
+
+void Java_org_rocksdb_LongArray_initFieldIDs(JNIEnv *env, jclass cls) {
+  LongArray_buffer = env->GetFieldID(cls, "buffer", "[J");
+  LongArray_length = env->GetFieldID(cls, "length", "I");
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // rocksdb::DB::Open
@@ -638,6 +647,78 @@ jlongArray rocksdb_get_snappy_compressed_longs_helper(
   return nullptr;
 }
 
+void rocksdb_get_snappy_compressed_longs_into_helper(
+    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
+    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
+    jint jkey_len, jobject target) {
+
+  if (!rocksdb::Snappy_Supported()) {
+    rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Snappy compression not supported"));
+  }
+
+  jboolean isCopy;
+  jbyte* key = env->GetByteArrayElements(jkey, &isCopy);
+  rocksdb::Slice key_slice(
+      reinterpret_cast<char*>(key), jkey_len);
+
+  std::string value;
+  rocksdb::Status s;
+  if (column_family_handle != nullptr) {
+    s = db->Get(read_opt, column_family_handle, key_slice, &value);
+  } else {
+    // backwards compatibility
+    s = db->Get(read_opt, key_slice, &value);
+  }
+
+  // trigger java unref on key.
+  // by passing JNI_ABORT, it will simply release the reference without
+  // copying the result back to the java byte array.
+  env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+
+  if (s.IsNotFound()) {
+    env->SetIntField(target, LongArray_length, 0);
+    return;
+  }
+
+  if (s.ok()) {
+    size_t uncompressed_length = 0;
+    if (!rocksdb::Snappy_GetUncompressedLength(value.c_str(), value.size(), &uncompressed_length)) {
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to get uncompressed length"));
+    }
+
+    if (uncompressed_length % sizeof(jlong)) {
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Truncated/corrupted data"));
+    }
+
+    jlongArray t_buffer = reinterpret_cast<jlongArray>(env->GetObjectField(target, LongArray_buffer));
+    jint t_buffer_length = t_buffer == NULL ? 0 : env->GetArrayLength(t_buffer);
+    jsize items = static_cast<jsize>(uncompressed_length) / sizeof(jlong);
+    jlongArray jret_value;
+
+    if (items <= t_buffer_length) {
+      jret_value = t_buffer;
+    } else {
+      t_buffer = jret_value = env->NewLongArray(items);
+      t_buffer_length = items;
+      env->SetObjectField(target, LongArray_buffer, reinterpret_cast<jobject>(t_buffer));
+    }
+
+    char *uncompressed = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
+    if (uncompressed == 0)
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+
+    bool uncompress_ok = rocksdb::Snappy_Uncompress(value.c_str(), value.size(), uncompressed);
+
+    env->ReleasePrimitiveArrayCritical((jarray) jret_value, uncompressed, 0);
+
+    if (!uncompress_ok)
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to uncompress value"));
+
+    env->SetIntField(target, LongArray_length, items);
+  }
+  rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
+}
+
 /*
  * Class:     org_rocksdb_RocksDB
  * Method:    get
@@ -721,6 +802,15 @@ jlongArray Java_org_rocksdb_RocksDB_getSnappyCompressedLongs(
       reinterpret_cast<rocksdb::DB*>(jdb_handle),
       *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), nullptr,
       jkey, jkey_len);
+}
+
+void Java_org_rocksdb_RocksDB_getSnappyCompressedLongsInto(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target) {
+  rocksdb_get_snappy_compressed_longs_into_helper(env,
+      reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), nullptr,
+      jkey, jkey_len, target);
 }
 
 jint rocksdb_get_helper(

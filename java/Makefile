@@ -21,6 +21,7 @@ NATIVE_JAVA_CLASSES = org.rocksdb.AbstractCompactionFilter\
 	org.rocksdb.HashLinkedListMemTableConfig\
 	org.rocksdb.HashSkipListMemTableConfig\
 	org.rocksdb.Logger\
+	org.rocksdb.LongArray\
 	org.rocksdb.MergeOperator\
 	org.rocksdb.Options\
 	org.rocksdb.PlainTableConfig\
