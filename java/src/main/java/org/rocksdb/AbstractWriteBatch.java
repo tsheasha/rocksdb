@@ -25,6 +25,16 @@ public abstract class AbstractWriteBatch extends RocksObject implements WriteBat
     put(key, key.length, value, value.length, columnFamilyHandle.nativeHandle_);
   }
 
+  public void putSnappyCompressedLongs(byte[] key, LongArray value) {
+    assert (isInitialized());
+    putSnappyCompressedLongs(key, key.length, value.buffer, value.length);
+  }
+
+  public void putSnappyCompressedLongs(ColumnFamilyHandle columnFamilyHandle, byte[] key, LongArray value) {
+    assert (isInitialized());
+    putSnappyCompressedLongs(key, key.length, value.buffer, value.length, columnFamilyHandle.nativeHandle_);
+  }
+
   @Override
   public void merge(byte[] key, byte[] value) {
     assert (isInitialized());
@@ -77,6 +87,10 @@ public abstract class AbstractWriteBatch extends RocksObject implements WriteBat
   abstract void put(byte[] key, int keyLen, byte[] value, int valueLen);
 
   abstract void put(byte[] key, int keyLen, byte[] value, int valueLen, long cfHandle);
+
+  abstract void putSnappyCompressedLongs(byte[] key, int keyLen, long[] value, int valueLen);
+
+  abstract void putSnappyCompressedLongs(byte[] key, int keyLen, long[] value, int valueLen, long cfHandle);
 
   abstract void merge(byte[] key, int keyLen, byte[] value, int valueLen);
 

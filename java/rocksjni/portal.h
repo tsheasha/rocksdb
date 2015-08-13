@@ -23,6 +23,7 @@
 #include "rocksjni/comparatorjnicallback.h"
 #include "rocksjni/loggerjnicallback.h"
 #include "rocksjni/writebatchhandlerjnicallback.h"
+#include "util/compression.h"
 
 namespace rocksdb {
 
@@ -807,6 +808,33 @@ class JniUtil {
 
       env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
       env->ReleaseByteArrayElements(jentry_value, value, JNI_ABORT);
+    }
+
+    static void kv_op_snappy_compressed(
+        std::function<void(rocksdb::Slice, rocksdb::Slice)> op,
+        JNIEnv* env, jobject jobj,
+        jbyteArray jkey, jint jkey_len,
+        jlongArray jentry_value, jint jentry_value_len) {
+      jbyte* key = env->GetByteArrayElements(jkey, nullptr);
+      jlong* value = env->GetLongArrayElements(jentry_value, nullptr);
+      CompressionOptions options;
+      std::string compressed;
+
+      if (!rocksdb::Snappy_Compress(options, reinterpret_cast<char*>(value), jentry_value_len * sizeof(jlong), &compressed)) {
+        env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+        env->ReleaseLongArrayElements(jentry_value, value, JNI_ABORT);
+
+        rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to compress input value"));
+      }
+
+      rocksdb::Slice key_slice(reinterpret_cast<char*>(key), jkey_len);
+      rocksdb::Slice value_slice(reinterpret_cast<char*>(&compressed[0]),
+          compressed.size());
+
+      op(key_slice, value_slice);
+
+      env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+      env->ReleaseLongArrayElements(jentry_value, value, JNI_ABORT);
     }
 
     /*

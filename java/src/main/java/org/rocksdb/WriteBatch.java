@@ -71,6 +71,9 @@ public class WriteBatch extends AbstractWriteBatch {
   @Override final native void put(byte[] key, int keyLen, byte[] value, int valueLen);
   @Override final native void put(byte[] key, int keyLen, byte[] value, int valueLen,
       long cfHandle);
+  @Override final native void putSnappyCompressedLongs(byte[] key, int keyLen, long[] value, int valueLen);
+  @Override final native void putSnappyCompressedLongs(byte[] key, int keyLen, long[] value, int valueLen,
+      long cfHandle);
   @Override final native void merge(byte[] key, int keyLen, byte[] value, int valueLen);
   @Override final native void merge(byte[] key, int keyLen, byte[] value, int valueLen,
       long cfHandle);
