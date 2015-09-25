@@ -103,6 +103,49 @@ void Java_org_rocksdb_WriteBatchWithIndex_put___3BI_3BIJ(
       jentry_value_len);
 }
 
+void Java_org_rocksdb_WriteBatchWithIndex_putSnappyCompressedLongs___3BI_3JI(
+    JNIEnv *env, jobject jobj,
+    jbyteArray jkey, jint jkey_len,
+    jlongArray jentry_value, jint jentry_value_len) {
+  auto* wbwi = rocksdb::WriteBatchWithIndexJni::getHandle(env, jobj);
+  assert(wbwi != nullptr);
+  auto put = [&wbwi] (rocksdb::Slice key, rocksdb::Slice value) {
+    wbwi->Put(key, value);
+  };
+  rocksdb::JniUtil::kv_op_snappy_compressed(put, env, jobj, jkey, jkey_len, jentry_value,
+      jentry_value_len);
+}
+
+void Java_org_rocksdb_WriteBatchWithIndex_putSnappyCompressedLongs___3BI_3JIJ(
+    JNIEnv *env, jobject jobj,
+    jbyteArray jkey, jint jkey_len,
+    jlongArray jentry_value, jint jentry_value_len, jlong jcf_handle) {
+  auto* wbwi = rocksdb::WriteBatchWithIndexJni::getHandle(env, jobj);
+  assert(wbwi != nullptr);
+  auto* cf_handle = reinterpret_cast<rocksdb::ColumnFamilyHandle*>(jcf_handle);
+  assert(cf_handle != nullptr);
+  auto put = [&wbwi, &cf_handle] (rocksdb::Slice key, rocksdb::Slice value) {
+    wbwi->Put(cf_handle, key, value);
+  };
+  rocksdb::JniUtil::kv_op_snappy_compressed(put, env, jobj, jkey, jkey_len, jentry_value,
+      jentry_value_len);
+}
+
+void Java_org_rocksdb_WriteBatchWithIndex_getSnappyCompressedLongsInto(
+    JNIEnv *env, jobject jobj,
+    jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target) {
+  auto* wbwi = rocksdb::WriteBatchWithIndexJni::getHandle(env, jobj);
+  assert(wbwi != nullptr);
+  auto get = [&wbwi, &jdb_handle, &jropt_handle] (const rocksdb::Slice key, std::string *value) -> rocksdb::Status {
+    return wbwi->GetFromBatchAndDB(
+      reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle),
+      key, value);
+  };
+  rocksdb::JniUtil::k_op_snappy_compressed_longs_into(get, env, jobj, jkey, jkey_len, target);
+}
+
 /*
  * Class:     org_rocksdb_WriteBatchWithIndex
  * Method:    merge
