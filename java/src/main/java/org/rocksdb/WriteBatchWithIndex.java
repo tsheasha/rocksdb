@@ -129,6 +129,9 @@ public class WriteBatchWithIndex extends AbstractWriteBatch {
   public final void getSnappyCompressedLongsInto(final RocksDB db, final ReadOptions opt, final byte[] key, final LongArray target) {
     getSnappyCompressedLongsInto(db.nativeHandle_, opt.nativeHandle_, key, key.length, target);
   }
+  public final void getSnappyCompressedBytesInto(final RocksDB db, final ReadOptions opt, final byte[] key, final ByteArray target) {
+    getSnappyCompressedBytesInto(db.nativeHandle_, opt.nativeHandle_, key, key.length, target);
+  }
 
   @Override final native void disposeInternal(long handle);
   @Override final native int count0();
@@ -137,6 +140,10 @@ public class WriteBatchWithIndex extends AbstractWriteBatch {
       long cfHandle);
   @Override final native void putSnappyCompressedLongs(byte[] key, int keyLen, long[] value, int valueLen);
   @Override final native void putSnappyCompressedLongs(byte[] key, int keyLen, long[] value, int valueLen,
+      long cfHandle);
+
+  @Override final native void putSnappyCompressedBytes(byte[] key, int keyLen, byte[] value, int valueLen);
+  @Override final native void putSnappyCompressedBytes(byte[] key, int keyLen, byte[] value, int valueLen,
       long cfHandle);
   @Override final native void merge(byte[] key, int keyLen, byte[] value, int valueLen);
   @Override final native void merge(byte[] key, int keyLen, byte[] value, int valueLen,
@@ -147,7 +154,7 @@ public class WriteBatchWithIndex extends AbstractWriteBatch {
   @Override final native void clear0();
 
   protected final native void getSnappyCompressedLongsInto(long dbHandle, long readOptHandle, byte[] key, int keyLen, LongArray target);
-
+  protected final native void getSnappyCompressedBytesInto(long dbHandle, long readOptHandle, byte[] key, int keyLen, ByteArray target);
   private native void newWriteBatchWithIndex();
   private native void newWriteBatchWithIndex(boolean overwriteKey);
   private native void newWriteBatchWithIndex(long fallbackIndexComparatorHandle, int reservedBytes,

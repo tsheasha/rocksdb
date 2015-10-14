@@ -810,6 +810,33 @@ class JniUtil {
       env->ReleaseByteArrayElements(jentry_value, value, JNI_ABORT);
     }
 
+    static void kv_op_snappy_compressed_bytes(
+        std::function<void(rocksdb::Slice, rocksdb::Slice)> op,
+        JNIEnv* env, jobject jobj,
+        jbyteArray jkey, jint jkey_len,
+        jbyteArray jentry_value, jint jentry_value_len) {
+      jbyte* key = env->GetByteArrayElements(jkey, nullptr);
+      jbyte* value = env->GetByteArrayElements(jentry_value, nullptr);
+      CompressionOptions options;
+      std::string compressed;
+
+      if (!rocksdb::Snappy_Compress(options, reinterpret_cast<char*>(value), jentry_value_len, &compressed)) {
+        env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+        env->ReleaseByteArrayElements(jentry_value, value, JNI_ABORT);
+
+        rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to compress input value"));
+      }
+
+      rocksdb::Slice key_slice(reinterpret_cast<char*>(key), jkey_len);
+      rocksdb::Slice value_slice(reinterpret_cast<char*>(&compressed[0]),
+          compressed.size());
+
+      op(key_slice, value_slice);
+
+      env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+      env->ReleaseByteArrayElements(jentry_value, value, JNI_ABORT);
+    }
+
     static void kv_op_snappy_compressed(
         std::function<void(rocksdb::Slice, rocksdb::Slice)> op,
         JNIEnv* env, jobject jobj,
@@ -903,6 +930,65 @@ class JniUtil {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
     }
 
+
+    static void k_op_snappy_compressed_bytes_into(
+        std::function<Status(rocksdb::Slice,std::string*)> op,
+        JNIEnv* env, jobject jobj,
+        jbyteArray jkey, jint jkey_len,
+        jobject target) {
+      if (!rocksdb::Snappy_Supported()) {
+        rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Snappy compression not supported"));
+      }
+
+      jboolean isCopy;
+      jbyte* key = env->GetByteArrayElements(jkey, &isCopy);
+      rocksdb::Slice key_slice(reinterpret_cast<char*>(key), jkey_len);
+
+      std::string value;
+      rocksdb::Status s = op(key_slice, &value);
+
+      // trigger java unref on key.
+      // by passing JNI_ABORT, it will simply release the reference without
+      // copying the result back to the java byte array.
+      env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+
+      if (s.IsNotFound()) {
+        env->SetIntField(target, ByteArray_length, 0);
+        return;
+      }
+
+      if (s.ok()) {
+        size_t uncompressed_length = 0;
+        if (!rocksdb::Snappy_GetUncompressedLength(value.c_str(), value.size(), &uncompressed_length)) {
+          rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to get uncompressed length"));
+        }
+
+        jbyteArray t_buffer = reinterpret_cast<jbyteArray>(env->GetObjectField(target, ByteArray_buffer));
+        jint t_buffer_length = t_buffer == NULL ? 0 : env->GetArrayLength(t_buffer);
+        jsize items = static_cast<jsize>(uncompressed_length);
+        jbyteArray jret_value;
+        if (items <= t_buffer_length) {
+          jret_value = t_buffer;
+        } else {
+          t_buffer = jret_value = env->NewByteArray(items);
+          t_buffer_length = items;
+          env->SetObjectField(target, ByteArray_buffer, reinterpret_cast<jobject>(t_buffer));
+        }
+        char *uncompressed = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
+        if (uncompressed == 0)
+          rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+
+        bool uncompress_ok = rocksdb::Snappy_Uncompress(value.c_str(), value.size(), uncompressed);
+        env->ReleasePrimitiveArrayCritical((jarray) jret_value, uncompressed, 0);
+        if (!uncompress_ok)
+          rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to uncompress value"));
+
+        env->SetIntField(target, ByteArray_length, items);
+      }
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
+    }
+
+
     /*
      * Helper for operations on a key
      * for example WriteBatch->Delete
@@ -927,9 +1013,17 @@ class JniUtil {
       LongArray_length = env->GetFieldID(cls, "length", "I");
     }
 
+    static void initByteArrayFieldIDs(JNIEnv *env, jclass cls) {
+      ByteArray_buffer = env->GetFieldID(cls, "buffer", "[B");
+      ByteArray_length = env->GetFieldID(cls, "length", "I");
+    }
+
  private:
     static jfieldID LongArray_buffer;
     static jfieldID LongArray_length;
+    static jfieldID ByteArray_buffer;
+    static jfieldID ByteArray_length;
+
 };
 
 }  // namespace rocksdb
