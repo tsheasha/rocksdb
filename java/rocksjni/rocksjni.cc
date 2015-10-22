@@ -599,6 +599,7 @@ jlongArray rocksdb_get_snappy_compressed_longs_helper(
 
   if (!rocksdb::Snappy_Supported()) {
     rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Snappy compression not supported"));
+    return nullptr;
   }
 
   jboolean isCopy;
@@ -628,24 +629,30 @@ jlongArray rocksdb_get_snappy_compressed_longs_helper(
     size_t uncompressed_length = 0;
     if (!rocksdb::Snappy_GetUncompressedLength(value.c_str(), value.size(), &uncompressed_length)) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to get uncompressed length"));
+      return nullptr;
     }
 
     if (uncompressed_length % sizeof(jlong)) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Truncated/corrupted data"));
+      return nullptr;
     }
 
     jsize items = static_cast<jsize>(uncompressed_length) / sizeof(jlong);
     jlongArray jret_value = env->NewLongArray(items);
     char *uncompressed = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
-    if (uncompressed == 0)
+    if (uncompressed == 0) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+      return nullptr;
+    }
 
     bool uncompress_ok = rocksdb::Snappy_Uncompress(value.c_str(), value.size(), uncompressed);
 
     env->ReleasePrimitiveArrayCritical((jarray) jret_value, uncompressed, 0);
 
-    if (!uncompress_ok)
+    if (!uncompress_ok) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to uncompress value"));
+      return nullptr;
+    }
 
     return jret_value;
   }
@@ -661,6 +668,7 @@ jbyteArray rocksdb_get_snappy_compressed_bytes_helper(
 
   if (!rocksdb::Snappy_Supported()) {
     rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Snappy compression not supported"));
+    return nullptr;
   }
 
   jboolean isCopy;
@@ -690,20 +698,25 @@ jbyteArray rocksdb_get_snappy_compressed_bytes_helper(
     size_t uncompressed_length = 0;
     if (!rocksdb::Snappy_GetUncompressedLength(value.c_str(), value.size(), &uncompressed_length)) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to get uncompressed length"));
+      return nullptr;
     }
 
     jsize items = static_cast<jsize>(uncompressed_length);
     jbyteArray jret_value = env->NewByteArray(items);
     char *uncompressed = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
-    if (uncompressed == 0)
+    if (uncompressed == 0) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+      return nullptr;
+    }
 
     bool uncompress_ok = rocksdb::Snappy_Uncompress(value.c_str(), value.size(), uncompressed);
 
     env->ReleasePrimitiveArrayCritical((jarray) jret_value, uncompressed, 0);
 
-    if (!uncompress_ok)
+    if (!uncompress_ok) {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to uncompress value"));
+      return nullptr;
+    }
 
     return jret_value;
   }
