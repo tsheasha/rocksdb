@@ -1167,7 +1167,12 @@ jobject
       jkeys_count, jcfhandle_list);
 }
 
-jobject Java_org_rocksdb_RocksDB_multiGetSnappyCompressedBytes__JJLjava_util_List_2I(
+/*
+ * Class:     org_rocksdb_RocksDB
+ * Method:    multiGetSnappyCompressedBytes
+ * Signature: (JJLjava/util/List;I)Ljava/util/List;
+ */
+jobject Java_org_rocksdb_RocksDB_multiGetSnappyCompressedBytes(
     JNIEnv* env, jobject jdb, jlong jdb_handle,
     jlong jropt_handle, jobject jkey_list, jint jkeys_count) {
   return multi_get_snappy_compressed_bytes_helper(env, jdb, reinterpret_cast<rocksdb::DB*>(jdb_handle),
