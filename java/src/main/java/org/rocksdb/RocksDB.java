@@ -906,6 +906,25 @@ public class RocksDB extends RocksObject {
     return keyValueMap;
   }
 
+  public Map<byte[], byte[]> multiGetSnappyCompressedBytes(final ReadOptions opt,
+      final List<byte[]> keys) throws RocksDBException {
+    assert(keys.size() != 0);
+
+    List<byte[]> values = multiGetSnappyCompressedBytes(
+        nativeHandle_, opt.nativeHandle_, keys, keys.size());
+
+    Map<byte[], byte[]> keyValueMap = new HashMap<>();
+    for(int i = 0; i < values.size(); i++) {
+      if(values.get(i) == null) {
+        continue;
+      }
+
+      keyValueMap.put(keys.get(i), values.get(i));
+    }
+
+    return keyValueMap;
+  }
+
   /**
    * Returns a map of keys for which values were found in DB.
    * <p>
@@ -1772,6 +1791,8 @@ public class RocksDB extends RocksObject {
   protected native List<byte[]> multiGet(
       long dbHandle, long rOptHandle, List<byte[]> keys, int keysCount,
       List<ColumnFamilyHandle> cfHandles);
+  protected native List<byte[]> multiGetSnappyCompressedBytes(
+      long dbHandle, long rOptHandle, List<byte[]> keys, int keysCount);
   protected native byte[] get(
       long handle, byte[] key, int keyLen) throws RocksDBException;
   protected native byte[] get(

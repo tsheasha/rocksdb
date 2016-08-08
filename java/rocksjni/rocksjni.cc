@@ -1005,6 +1005,115 @@ jobject multi_get_helper(JNIEnv* env, jobject jdb, rocksdb::DB* db,
   return jvalue_list;
 }
 
+// multiget snappy compressed bytes
+jobject multi_get_snappy_compressed_bytes_helper(JNIEnv* env, jobject jdb, rocksdb::DB* db,
+    const rocksdb::ReadOptions& rOpt, jobject jkey_list, jint jkeys_count,
+    jobject jcfhandle_list) {
+
+  if (!rocksdb::Snappy_Supported()) {
+    rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Snappy compression not supported"));
+    return nullptr;
+  }
+
+  std::vector<rocksdb::Slice> keys;
+  std::vector<jbyte*> keys_to_free;
+  std::vector<rocksdb::ColumnFamilyHandle*> cf_handles;
+
+  if (jcfhandle_list != nullptr) {
+    // get cf iterator
+    jobject cfIteratorObj = env->CallObjectMethod(
+        jcfhandle_list, rocksdb::ListJni::getIteratorMethod(env));
+
+    // iterate over keys and convert java byte array to slice
+    while (env->CallBooleanMethod(
+        cfIteratorObj, rocksdb::ListJni::getHasNextMethod(env)) == JNI_TRUE) {
+      jobject jobj = (jbyteArray) env->CallObjectMethod(
+          cfIteratorObj, rocksdb::ListJni::getNextMethod(env));
+      rocksdb::ColumnFamilyHandle* cfHandle =
+          rocksdb::ColumnFamilyHandleJni::getHandle(env, jobj);
+      cf_handles.push_back(cfHandle);
+    }
+  }
+
+  // Process key list
+  // get iterator
+  jobject iteratorObj = env->CallObjectMethod(
+      jkey_list, rocksdb::ListJni::getIteratorMethod(env));
+
+  // iterate over keys and convert java byte array to slice
+  while (env->CallBooleanMethod(
+      iteratorObj, rocksdb::ListJni::getHasNextMethod(env)) == JNI_TRUE) {
+    jbyteArray jkey = (jbyteArray) env->CallObjectMethod(
+       iteratorObj, rocksdb::ListJni::getNextMethod(env));
+    jint key_length = env->GetArrayLength(jkey);
+
+    jbyte* key = new jbyte[key_length];
+    env->GetByteArrayRegion(jkey, 0, key_length, key);
+    // store allocated jbyte to free it after multiGet call
+    keys_to_free.push_back(key);
+
+    rocksdb::Slice key_slice(
+      reinterpret_cast<char*>(key), key_length);
+    keys.push_back(key_slice);
+  }
+
+  std::vector<std::string> values;
+  std::vector<rocksdb::Status> s;
+  if (cf_handles.size() == 0) {
+    s = db->MultiGet(rOpt, keys, &values);
+  } else {
+    s = db->MultiGet(rOpt, cf_handles, keys, &values);
+  }
+
+  // Don't reuse class pointer
+  jclass jclazz = env->FindClass("java/util/ArrayList");
+  jmethodID mid = rocksdb::ListJni::getArrayListConstructorMethodId(
+      env, jclazz);
+  jobject jvalue_list = env->NewObject(jclazz, mid, jkeys_count);
+
+  // insert in java list
+  for (std::vector<rocksdb::Status>::size_type i = 0; i != s.size(); i++) {
+    if (s[i].ok()) {
+
+      size_t uncompressed_length = 0;
+      if (!rocksdb::Snappy_GetUncompressedLength(values[i].c_str(), values[i].size(), &uncompressed_length)) {
+        rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to get uncompressed length"));
+        return nullptr;
+      }
+
+      jbyteArray jentry_value =
+          env->NewByteArray(static_cast<jsize>(uncompressed_length));
+
+      char *uncompressed = (char *) env->GetPrimitiveArrayCritical((jarray) jentry_value, 0);
+      if (uncompressed == 0) {
+        rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+        return nullptr;
+      }
+
+      bool uncompress_ok = rocksdb::Snappy_Uncompress(values[i].c_str(), values[i].size(), uncompressed);
+      env->ReleasePrimitiveArrayCritical((jarray) jentry_value, uncompressed, 0);
+
+      if (!uncompress_ok) {
+        rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to uncompress value"));
+        return nullptr;
+      }
+
+      env->CallBooleanMethod(
+          jvalue_list, rocksdb::ListJni::getListAddMethodId(env),
+              jentry_value);
+    } else {
+      env->CallBooleanMethod(
+          jvalue_list, rocksdb::ListJni::getListAddMethodId(env), nullptr);
+    }
+  }
+  // free up allocated byte arrays
+  for (std::vector<jbyte*>::size_type i = 0; i != keys_to_free.size(); i++) {
+    delete[] keys_to_free[i];
+  }
+  keys_to_free.clear();
+  return jvalue_list;
+}
+
 /*
  * Class:     org_rocksdb_RocksDB
  * Method:    multiGet
@@ -1056,6 +1165,14 @@ jobject
   return multi_get_helper(env, jdb, reinterpret_cast<rocksdb::DB*>(jdb_handle),
       *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), jkey_list,
       jkeys_count, jcfhandle_list);
+}
+
+jobject Java_org_rocksdb_RocksDB_multiGetSnappyCompressedBytes__JJLjava_util_List_2I(
+    JNIEnv* env, jobject jdb, jlong jdb_handle,
+    jlong jropt_handle, jobject jkey_list, jint jkeys_count) {
+  return multi_get_snappy_compressed_bytes_helper(env, jdb, reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), jkey_list,
+      jkeys_count, nullptr);
 }
 
 /*
