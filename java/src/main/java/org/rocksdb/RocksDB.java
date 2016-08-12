@@ -785,9 +785,9 @@ public class RocksDB extends RocksObject {
       throws RocksDBException {
     getSnappyCompressedBytesInto(nativeHandle_, opt.nativeHandle_, key, key.length, target);
   }
-  public void getInto(final ReadOptions opt, final byte[] key, final ByteArray target)
+  public int getInto(final ReadOptions opt, final byte[] key, final ByteArray target)
       throws RocksDBException {
-    getInto(nativeHandle_, opt.nativeHandle_, key, key.length, target);
+    return getInto(nativeHandle_, opt.nativeHandle_, key, key.length, target);
   }
 
   /**
@@ -1816,7 +1816,7 @@ public class RocksDB extends RocksObject {
   protected native void getSnappyCompressedBytesInto(
       long handle, long readOptHandle,
       byte[] key, int keyLen, ByteArray target) throws RocksDBException;
-  protected native void getInto(
+  protected native int getInto(
       long handle, long readOptHandle,
       byte[] key, int keyLen, ByteArray target) throws RocksDBException;
   protected native byte[] get(
