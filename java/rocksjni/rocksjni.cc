@@ -1114,6 +1114,36 @@ jobject multi_get_snappy_compressed_bytes_helper(JNIEnv* env, jobject jdb, rocks
   return jvalue_list;
 }
 
+jint rocksdb_get_into_helper(
+    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
+    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
+    jint jkey_len, jobject target) {
+
+  auto get = [&db, &read_opt, &column_family_handle] (const rocksdb::Slice key, std::string *value) -> rocksdb::Status {
+    if (column_family_handle != nullptr) {
+      return db->Get(read_opt, column_family_handle, key, value);
+    } else {
+      // backwards compatibility
+      return db->Get(read_opt, key, value);
+    }
+  };
+  return rocksdb::JniUtil::k_op_bytes_into(get, env, nullptr, jkey, jkey_len, target);
+}
+
+/*
+ * Class:     org_rocksdb_RocksDB
+ * Method:    getInto
+ * Signature: (JJ[BI[BI)I
+ */
+jint Java_org_rocksdb_RocksDB_getInto___JJ_3BI_3BI(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target) {
+  return rocksdb_get_into_helper(env,
+      reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle),
+      nullptr, jkey, jkey_len, target);
+}
+
 /*
  * Class:     org_rocksdb_RocksDB
  * Method:    multiGet

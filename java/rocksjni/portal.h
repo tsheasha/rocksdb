@@ -1003,6 +1003,63 @@ class JniUtil {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
     }
 
+    static int k_op_bytes_into(
+        std::function<Status(rocksdb::Slice,std::string*)> op,
+        JNIEnv* env, jobject jobj,
+        jbyteArray jkey, jint jkey_len,
+        jobject target) {
+      static const int kNotFound = -1;
+      static const int kStatusError = -2;
+
+      jbyte* key = env->GetByteArrayElements(jkey, 0);
+      rocksdb::Slice key_slice(
+          reinterpret_cast<char*>(key), jkey_len);
+
+      std::string value;
+      rocksdb::Status s = op(key_slice, &value);
+
+      // trigger java unref on key.
+      // by passing JNI_ABORT, it will simply release the reference without
+      // copying the result back to the java byte array.
+      env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+
+      if (s.IsNotFound()) {
+        return kNotFound;
+      }
+
+      if (s.ok()) {
+
+        jbyteArray t_buffer = reinterpret_cast<jbyteArray>(env->GetObjectField(target, ByteArray_buffer));
+        jint t_buffer_length = t_buffer == NULL ? 0 : env->GetArrayLength(t_buffer);
+
+        int value_len = static_cast<int>(value.size());
+        jsize items = static_cast<jsize>(value_len);
+
+        jbyteArray jret_value;
+        if (items <= t_buffer_length) {
+          jret_value = t_buffer;
+        } else {
+          t_buffer = jret_value = env->NewByteArray(items);
+          t_buffer_length = items;
+          env->SetObjectField(target, ByteArray_buffer, reinterpret_cast<jobject>(t_buffer));
+        }
+
+        char *allocated = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
+        if (allocated == 0) {
+          rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+          return kStatusError;
+        }
+
+        memcpy(allocated, value.c_str(), value_len+1);
+        env->ReleasePrimitiveArrayCritical((jarray) jret_value, allocated, 0);
+
+        env->SetIntField(target, ByteArray_length, items);
+      }
+
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
+      return kStatusError;
+    }
+
 
     /*
      * Helper for operations on a key
