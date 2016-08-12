@@ -1135,7 +1135,7 @@ jint rocksdb_get_into_helper(
  * Method:    getInto
  * Signature: (JJ[BI[BI)I
  */
-jint Java_org_rocksdb_RocksDB_getInto___JJ_3BILorg_rocksdb_ByteArray_2(
+jint Java_org_rocksdb_RocksDB_getInto(
     JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
     jbyteArray jkey, jint jkey_len, jobject target) {
   return rocksdb_get_into_helper(env,
