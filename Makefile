@@ -1329,7 +1329,7 @@ endif
 
 libz.a:
 	-rm -rf zlib-1.2.8
-	curl -O -L http://zlib.net/zlib-1.2.8.tar.gz
+	curl -L https://github.com/madler/zlib/archive/v1.2.8.tar.gz -o zlib-1.2.8.tar.gz
 	tar xvzf zlib-1.2.8.tar.gz
 	cd zlib-1.2.8 && CFLAGS='-fPIC' ./configure --static && make
 	cp zlib-1.2.8/libz.a .

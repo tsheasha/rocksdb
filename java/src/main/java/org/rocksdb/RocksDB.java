@@ -826,6 +826,29 @@ public class RocksDB extends RocksObject {
     return get(nativeHandle_, opt.nativeHandle_, key, 0, key.length);
   }
 
+  public byte[] getSnappyCompressedBytes(final ReadOptions opt, final byte[] key)
+      throws RocksDBException {
+    return getSnappyCompressedBytes(nativeHandle_, opt.nativeHandle_, key, key.length);
+
+  }
+  public byte[] getSnappyCompressedBytes(final ColumnFamilyHandle columnFamilyHandle,
+          final ReadOptions opt, final byte[] key)
+      throws RocksDBException {
+    return getSnappyCompressedBytes(nativeHandle_, opt.nativeHandle_, key, key.length,
+            columnFamilyHandle.nativeHandle_);
+  }
+
+  public void getSnappyCompressedBytesInto(final ReadOptions opt, final byte[] key, final ByteArray target)
+      throws RocksDBException {
+    getSnappyCompressedBytesInto(nativeHandle_, opt.nativeHandle_, key, key.length, target);
+  }
+
+  public void getSnappyCompressedBytesInto(final ColumnFamilyHandle columnFamilyHandle,
+          final ReadOptions opt, final byte[] key, final ByteArray target)
+      throws RocksDBException {
+    getSnappyCompressedBytesInto(nativeHandle_, opt.nativeHandle_, key, key.length, target, columnFamilyHandle.nativeHandle_);
+  }
+
   /**
    * The simplified version of get which returns a new byte array storing
    * the value associated with the specified input key if any.  null will be
@@ -2235,6 +2258,18 @@ public class RocksDB extends RocksObject {
       byte[] key, int keyOffset, int keyLength) throws RocksDBException;
   protected native byte[] get(long handle, long readOptHandle, byte[] key,
       int keyOffset, int keyLength, long cfHandle) throws RocksDBException;
+  protected native byte[] getSnappyCompressedBytes(
+      long handle, long readOptHandle,
+      byte[] key, int keyLen) throws RocksDBException;
+  protected native byte[] getSnappyCompressedBytes(
+      long handle, long readOptHandle,
+      byte[] key, int keyLen, long cfHandle) throws RocksDBException;
+  protected native void getSnappyCompressedBytesInto(
+      long handle, long readOptHandle,
+      byte[] key, int keyLen, ByteArray target) throws RocksDBException;
+  protected native void getSnappyCompressedBytesInto(
+      long handle, long readOptHandle,
+      byte[] key, int keyLen, ByteArray target, long cfHandle) throws RocksDBException;
   protected native void delete(long handle, byte[] key, int keyOffset,
       int keyLength) throws RocksDBException;
   protected native void delete(long handle, byte[] key, int keyOffset,

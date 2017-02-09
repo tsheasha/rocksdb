@@ -136,6 +136,10 @@ public class WriteBatchWithIndex extends AbstractWriteBatch {
         baseIterator);
   }
 
+  public final void getSnappyCompressedBytesInto(final RocksDB db, final ReadOptions opt, final byte[] key, final ByteArray target) {
+    getSnappyCompressedBytesInto(nativeHandle_, db.nativeHandle_, opt.nativeHandle_, key, key.length, target);
+  }
+
   @Override protected final native void disposeInternal(final long handle);
   @Override final native int count0(final long handle);
   @Override final native void put(final long handle, final byte[] key,
@@ -167,4 +171,11 @@ public class WriteBatchWithIndex extends AbstractWriteBatch {
   private native long iterator1(final long handle, final long cfHandle);
   private native long iteratorWithBase(final long handle,
       final long baseIteratorHandle, final long cfHandle);
+
+  @Override final native void putSnappyCompressedBytes(final long handle, byte[] key,
+      int keyLen, byte[] value, int valueLen);
+  @Override final native void putSnappyCompressedBytes(final long handle, byte[] key,
+      int keyLen, byte[] value, int valueLen, long cfHandle);
+  protected final native void getSnappyCompressedBytesInto(final long handle, long dbHandle,
+      long readOptHandle, byte[] key, int keyLen, ByteArray target);
 }

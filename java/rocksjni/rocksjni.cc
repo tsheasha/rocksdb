@@ -9,18 +9,29 @@
 #include <jni.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <algorithm>
+#include <functional>
+#include <string.h>
 #include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
-#include <algorithm>
 
 #include "include/org_rocksdb_RocksDB.h"
+#include "include/org_rocksdb_ByteArray.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
 #include "rocksdb/types.h"
 #include "rocksjni/portal.h"
+#include "util/compression.h"
+
+jfieldID rocksdb::JniUtil::ByteArray_buffer;
+jfieldID rocksdb::JniUtil::ByteArray_length;
+
+void Java_org_rocksdb_ByteArray_initFieldIDs(JNIEnv *env, jclass cls) {
+  rocksdb::JniUtil::initByteArrayFieldIDs(env, cls);
+}
 
 #ifdef min
 #undef min
@@ -510,6 +521,86 @@ jbyteArray rocksdb_get_helper(
   return nullptr;
 }
 
+jbyteArray rocksdb_get_snappy_compressed_bytes_helper(
+    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
+    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
+    jint jkey_len) {
+
+  if (!rocksdb::Snappy_Supported()) {
+    rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Snappy compression not supported"));
+    return nullptr;
+  }
+
+  jboolean isCopy;
+  jbyte* key = env->GetByteArrayElements(jkey, &isCopy);
+  rocksdb::Slice key_slice(
+      reinterpret_cast<char*>(key), jkey_len);
+
+  std::string value;
+  rocksdb::Status s;
+  if (column_family_handle != nullptr) {
+    s = db->Get(read_opt, column_family_handle, key_slice, &value);
+  } else {
+    // backwards compatibility
+    s = db->Get(read_opt, key_slice, &value);
+  }
+
+  // trigger java unref on key.
+  // by passing JNI_ABORT, it will simply release the reference without
+  // copying the result back to the java byte array.
+  env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
+
+  if (s.IsNotFound()) {
+    return nullptr;
+  }
+
+  if (s.ok()) {
+    size_t uncompressed_length = 0;
+    if (!rocksdb::Snappy_GetUncompressedLength(value.c_str(), value.size(), &uncompressed_length)) {
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to get uncompressed length"));
+      return nullptr;
+    }
+
+    jsize items = static_cast<jsize>(uncompressed_length);
+    jbyteArray jret_value = env->NewByteArray(items);
+    char *uncompressed = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
+    if (uncompressed == 0) {
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
+      return nullptr;
+    }
+
+    bool uncompress_ok = rocksdb::Snappy_Uncompress(value.c_str(), value.size(), uncompressed);
+
+    env->ReleasePrimitiveArrayCritical((jarray) jret_value, uncompressed, 0);
+
+    if (!uncompress_ok) {
+      rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to uncompress value"));
+      return nullptr;
+    }
+
+    return jret_value;
+  }
+  rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
+
+  return nullptr;
+}
+
+void rocksdb_get_snappy_compressed_bytes_into_helper(
+    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
+    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
+    jint jkey_len, jobject target) {
+
+  auto get = [&db, &read_opt, &column_family_handle] (const rocksdb::Slice key, std::string *value) -> rocksdb::Status {
+    if (column_family_handle != nullptr) {
+      return db->Get(read_opt, column_family_handle, key, value);
+    } else {
+      // backwards compatibility
+      return db->Get(read_opt, key, value);
+    }
+  };
+  rocksdb::JniUtil::k_op_snappy_compressed_bytes_into(get, env, nullptr, jkey, jkey_len, target);
+}
+
 /*
  * Class:     org_rocksdb_RocksDB
  * Method:    get
@@ -578,6 +669,58 @@ jbyteArray Java_org_rocksdb_RocksDB_get__JJ_3BIIJ(
         rocksdb::Status::InvalidArgument("Invalid ColumnFamilyHandle."));
     // will never be evaluated
     return env->NewByteArray(0);
+  }
+}
+
+jbyteArray Java_org_rocksdb_RocksDB_getSnappyCompressedBytes__JJ_3BI(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len) {
+  return rocksdb_get_snappy_compressed_bytes_helper(env,
+      reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), nullptr,
+      jkey, jkey_len);
+}
+
+jbyteArray Java_org_rocksdb_RocksDB_getSnappyCompressedBytes__JJ_3BIJ(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jlong jcf_handle) {
+  auto cf_handle = reinterpret_cast<rocksdb::ColumnFamilyHandle*>(jcf_handle);
+  if (cf_handle != nullptr) {
+      return rocksdb_get_snappy_compressed_bytes_helper(env,
+          reinterpret_cast<rocksdb::DB*>(jdb_handle),
+          *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), cf_handle,
+          jkey, jkey_len);
+  } else {
+    rocksdb::RocksDBExceptionJni::ThrowNew(env,
+        rocksdb::Status::InvalidArgument("Invalid ColumnFamilyHandle."));
+    // will never be evaluated
+    return env->NewByteArray(0);
+  }
+}
+
+void Java_org_rocksdb_RocksDB_getSnappyCompressedBytesInto__JJ_3BILorg_rocksdb_ByteArray_2(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target) {
+  rocksdb_get_snappy_compressed_bytes_into_helper(env,
+      reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), nullptr,
+      jkey, jkey_len, target);
+}
+
+void Java_org_rocksdb_RocksDB_getSnappyCompressedBytesInto__JJ_3BILorg_rocksdb_ByteArray_2J(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target, jlong jcf_handle) {
+  auto cf_handle = reinterpret_cast<rocksdb::ColumnFamilyHandle*>(jcf_handle);
+  if (cf_handle != nullptr) {
+      rocksdb_get_snappy_compressed_bytes_into_helper(env,
+          reinterpret_cast<rocksdb::DB*>(jdb_handle),
+          *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), cf_handle,
+          jkey, jkey_len, target);
+  } else {
+    rocksdb::RocksDBExceptionJni::ThrowNew(env,
+        rocksdb::Status::InvalidArgument("Invalid ColumnFamilyHandle."));
+    // will never be evaluated
+    return;
   }
 }
 

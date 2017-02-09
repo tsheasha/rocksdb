@@ -32,6 +32,28 @@ public abstract class AbstractWriteBatch extends RocksObject
         columnFamilyHandle.nativeHandle_);
   }
 
+  public void put(byte[] key, ByteArray value) {
+    assert (isOwningHandle());
+    put(nativeHandle_, key, key.length, value.buffer, value.length);
+  }
+
+  public void put(ColumnFamilyHandle columnFamilyHandle, byte[] key,
+      ByteArray value) {
+    assert (isOwningHandle());
+    put(nativeHandle_, key, key.length, value.buffer, value.length,
+        columnFamilyHandle.nativeHandle_);
+  }
+
+  public void putSnappyCompressedBytes(byte[] key, ByteArray value) {
+    assert (isOwningHandle());
+    putSnappyCompressedBytes(nativeHandle_, key, key.length, value.buffer, value.length);
+  }
+
+  public void putSnappyCompressedBytes(ColumnFamilyHandle columnFamilyHandle, byte[] key, ByteArray value) {
+    assert (isOwningHandle());
+    putSnappyCompressedBytes(nativeHandle_, key, key.length, value.buffer, value.length, columnFamilyHandle.nativeHandle_);
+  }
+
   @Override
   public void merge(byte[] key, byte[] value) {
     assert (isOwningHandle());
@@ -89,6 +111,12 @@ public abstract class AbstractWriteBatch extends RocksObject
 
   abstract void put(final long handle, final byte[] key, final int keyLen,
       final byte[] value, final int valueLen, final long cfHandle);
+
+  abstract void putSnappyCompressedBytes(final long handle, byte[] key, int keyLen, byte[] value,
+      int valueLen);
+
+  abstract void putSnappyCompressedBytes(final long handle, byte[] key, int keyLen, byte[] value,
+      int valueLen, long cfHandle);
 
   abstract void merge(final long handle, final byte[] key, final int keyLen,
       final byte[] value, final int valueLen);

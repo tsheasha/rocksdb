@@ -130,6 +130,34 @@ void Java_org_rocksdb_WriteBatch_put__J_3BI_3BIJ(
       jentry_value_len);
 }
 
+void Java_org_rocksdb_WriteBatch_putSnappyCompressedBytes__J_3BI_3BI(
+    JNIEnv *env, jobject jobj, jlong jwb_handle,
+    jbyteArray jkey, jint jkey_len,
+    jbyteArray jentry_value, jint jentry_value_len) {
+  auto* wb = reinterpret_cast<rocksdb::WriteBatch*>(jwb_handle);
+  assert(wb != nullptr);
+  auto put = [&wb] (rocksdb::Slice key, rocksdb::Slice value) {
+    wb->Put(key, value);
+  };
+  rocksdb::JniUtil::kv_op_snappy_compressed_bytes(put, env, jobj, jkey, jkey_len, jentry_value,
+      jentry_value_len);
+}
+
+void Java_org_rocksdb_WriteBatch_putSnappyCompressedBytes__J_3BI_3BIJ(
+    JNIEnv *env, jobject jobj, jlong jwb_handle,
+    jbyteArray jkey, jint jkey_len,
+    jbyteArray jentry_value, jint jentry_value_len, jlong jcf_handle) {
+  auto* wb = reinterpret_cast<rocksdb::WriteBatch*>(jwb_handle);
+  assert(wb != nullptr);
+  auto* cf_handle = reinterpret_cast<rocksdb::ColumnFamilyHandle*>(jcf_handle);
+  assert(cf_handle != nullptr);
+  auto put = [&wb, &cf_handle] (rocksdb::Slice key, rocksdb::Slice value) {
+    wb->Put(cf_handle, key, value);
+  };
+  rocksdb::JniUtil::kv_op_snappy_compressed_bytes(put, env, jobj, jkey, jkey_len, jentry_value,
+      jentry_value_len);
+}
+
 /*
  * Class:     org_rocksdb_WriteBatch
  * Method:    merge
