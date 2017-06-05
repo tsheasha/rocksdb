@@ -484,6 +484,22 @@ jboolean Java_org_rocksdb_RocksDB_keyMayExist__JJ_3BIIJLjava_lang_StringBuffer_2
 //////////////////////////////////////////////////////////////////////////////
 // rocksdb::DB::Get
 
+void rocksdb_get_helper(
+    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
+    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
+    jint jkey_len, jobject target) {
+
+  auto get = [&db, &read_opt, &column_family_handle] (const rocksdb::Slice key, std::string *value) -> rocksdb::Status {
+    if (column_family_handle != nullptr) {
+      return db->Get(read_opt, column_family_handle, key, value);
+    } else {
+      // backwards compatibility
+      return db->Get(read_opt, key, value);
+    }
+  };
+  rocksdb::JniUtil::k_op_bytes_into(get, env, nullptr, jkey, jkey_len, target);
+}
+
 jbyteArray rocksdb_get_helper(
     JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
     rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
@@ -798,22 +814,6 @@ jint rocksdb_get_helper(JNIEnv* env, rocksdb::DB* db,
   env->SetByteArrayRegion(jval, jval_off, length,
                           reinterpret_cast<const jbyte*>(cvalue.c_str()));
   return cvalue_len;
-}
-
-void rocksdb_get_helper(
-    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
-    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
-    jint jkey_len, jobject target) {
-
-  auto get = [&db, &read_opt, &column_family_handle] (const rocksdb::Slice key, std::string *value) -> rocksdb::Status {
-    if (column_family_handle != nullptr) {
-      return db->Get(read_opt, column_family_handle, key, value);
-    } else {
-      // backwards compatibility
-      return db->Get(read_opt, key, value);
-    }
-  };
-  rocksdb::JniUtil::k_op_bytes_into(get, env, nullptr, jkey, jkey_len, target);
 }
 
 // cf multi get
