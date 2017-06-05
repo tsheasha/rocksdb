@@ -849,6 +849,17 @@ public class RocksDB extends RocksObject {
     getSnappyCompressedBytesInto(nativeHandle_, opt.nativeHandle_, key, key.length, target, columnFamilyHandle.nativeHandle_);
   }
 
+  public void get(final ReadOptions opt, final byte[] key, final ByteArray target)
+      throws RocksDBException {
+    get(nativeHandle_, opt.nativeHandle_, key, key.length, target);
+  }
+
+  public void get(final ColumnFamilyHandle columnFamilyHandle,
+          final ReadOptions opt, final byte[] key, final ByteArray target)
+      throws RocksDBException {
+    get(nativeHandle_, opt.nativeHandle_, key, key.length, target, columnFamilyHandle.nativeHandle_);
+  }
+
   /**
    * The simplified version of get which returns a new byte array storing
    * the value associated with the specified input key if any.  null will be
@@ -2268,6 +2279,12 @@ public class RocksDB extends RocksObject {
       long handle, long readOptHandle,
       byte[] key, int keyLen, ByteArray target) throws RocksDBException;
   protected native void getSnappyCompressedBytesInto(
+      long handle, long readOptHandle,
+      byte[] key, int keyLen, ByteArray target, long cfHandle) throws RocksDBException;
+  protected native void get(
+      long handle, long readOptHandle,
+      byte[] key, int keyLen, ByteArray target) throws RocksDBException;
+  protected native void get(
       long handle, long readOptHandle,
       byte[] key, int keyLen, ByteArray target, long cfHandle) throws RocksDBException;
   protected native void delete(long handle, byte[] key, int keyOffset,

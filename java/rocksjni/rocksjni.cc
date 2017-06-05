@@ -724,6 +724,32 @@ void Java_org_rocksdb_RocksDB_getSnappyCompressedBytesInto__JJ_3BILorg_rocksdb_B
   }
 }
 
+void Java_org_rocksdb_RocksDB_get__JJ_3BILorg_rocksdb_ByteArray_2(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target) {
+  rocksdb_get_helper(env,
+      reinterpret_cast<rocksdb::DB*>(jdb_handle),
+      *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), nullptr,
+      jkey, jkey_len, target);
+}
+
+void Java_org_rocksdb_RocksDB_get__JJ_3BILorg_rocksdb_ByteArray_2J(
+    JNIEnv* env, jobject jdb, jlong jdb_handle, jlong jropt_handle,
+    jbyteArray jkey, jint jkey_len, jobject target, jlong jcf_handle) {
+  auto cf_handle = reinterpret_cast<rocksdb::ColumnFamilyHandle*>(jcf_handle);
+  if (cf_handle != nullptr) {
+      rocksdb_get_helper(env,
+          reinterpret_cast<rocksdb::DB*>(jdb_handle),
+          *reinterpret_cast<rocksdb::ReadOptions*>(jropt_handle), cf_handle,
+          jkey, jkey_len, target);
+  } else {
+    rocksdb::RocksDBExceptionJni::ThrowNew(env,
+        rocksdb::Status::InvalidArgument("Invalid ColumnFamilyHandle."));
+    // will never be evaluated
+    return;
+  }
+}
+
 jint rocksdb_get_helper(JNIEnv* env, rocksdb::DB* db,
                         const rocksdb::ReadOptions& read_options,
                         rocksdb::ColumnFamilyHandle* column_family_handle,
@@ -772,6 +798,22 @@ jint rocksdb_get_helper(JNIEnv* env, rocksdb::DB* db,
   env->SetByteArrayRegion(jval, jval_off, length,
                           reinterpret_cast<const jbyte*>(cvalue.c_str()));
   return cvalue_len;
+}
+
+void rocksdb_get_helper(
+    JNIEnv* env, rocksdb::DB* db, const rocksdb::ReadOptions& read_opt,
+    rocksdb::ColumnFamilyHandle* column_family_handle, jbyteArray jkey,
+    jint jkey_len, jobject target) {
+
+  auto get = [&db, &read_opt, &column_family_handle] (const rocksdb::Slice key, std::string *value) -> rocksdb::Status {
+    if (column_family_handle != nullptr) {
+      return db->Get(read_opt, column_family_handle, key, value);
+    } else {
+      // backwards compatibility
+      return db->Get(read_opt, key, value);
+    }
+  };
+  rocksdb::JniUtil::k_op_bytes_into(get, env, nullptr, jkey, jkey_len, target);
 }
 
 // cf multi get
