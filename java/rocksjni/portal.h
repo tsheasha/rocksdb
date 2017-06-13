@@ -1011,8 +1011,6 @@ class JniUtil {
         JNIEnv* env, jobject jobj,
         jbyteArray jkey, jint jkey_len,
         jobject target) {
-      static const int kNotFound = -1;
-      static const int kStatusError = -2;
 
       jboolean isCopy;
       jbyte* key = env->GetByteArrayElements(jkey, &isCopy);
