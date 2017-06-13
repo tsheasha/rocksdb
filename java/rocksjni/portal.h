@@ -1006,7 +1006,7 @@ class JniUtil {
       rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
     }
 
-    static int k_op_bytes_into(
+    static void k_op_bytes_into(
         std::function<Status(rocksdb::Slice,std::string*)> op,
         JNIEnv* env, jobject jobj,
         jbyteArray jkey, jint jkey_len,
@@ -1014,9 +1014,9 @@ class JniUtil {
       static const int kNotFound = -1;
       static const int kStatusError = -2;
 
-      jbyte* key = env->GetByteArrayElements(jkey, 0);
-      rocksdb::Slice key_slice(
-          reinterpret_cast<char*>(key), jkey_len);
+      jboolean isCopy;
+      jbyte* key = env->GetByteArrayElements(jkey, &isCopy);
+      rocksdb::Slice key_slice(reinterpret_cast<char*>(key), jkey_len);
 
       std::string value;
       rocksdb::Status s = op(key_slice, &value);
@@ -1027,7 +1027,8 @@ class JniUtil {
       env->ReleaseByteArrayElements(jkey, key, JNI_ABORT);
 
       if (s.IsNotFound()) {
-        return kNotFound;
+        env->SetIntField(target, ByteArray_length, 0);
+        return;
       }
 
       if (s.ok()) {
@@ -1049,18 +1050,18 @@ class JniUtil {
 
         char *allocated = (char *) env->GetPrimitiveArrayCritical((jarray) jret_value, 0);
         if (allocated == 0) {
+          env->ReleasePrimitiveArrayCritical((jarray) jret_value, allocated, 0);
           rocksdb::RocksDBExceptionJni::ThrowNew(env, rocksdb::Status::Corruption("Unable to allocate output buffer"));
-          return kStatusError;
+          return;
         }
 
-        memcpy(allocated, value.c_str(), value_len+1);
+        memcpy(allocated, value.c_str(), value.size());
         env->ReleasePrimitiveArrayCritical((jarray) jret_value, allocated, 0);
 
         env->SetIntField(target, ByteArray_length, items);
       }
 
       rocksdb::RocksDBExceptionJni::ThrowNew(env, s);
-      return kStatusError;
     }
 
 
